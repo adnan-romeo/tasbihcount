@@ -15,6 +15,8 @@ This app is wired for Firebase Authentication + Firestore and is ready for final
 
 You must link this app to your own Firebase project.
 
+Security note: Firebase credential files are intentionally not committed (`android/app/google-services.json`, `ios/Runner/GoogleService-Info.plist`, `lib/firebase_options.dart`).
+
 Run in PowerShell:
 
 ```powershell
@@ -26,6 +28,8 @@ This command will:
 1. Ask you to log in to Firebase CLI.
 2. Run `flutterfire configure`.
 3. Generate real Firebase config (`lib/firebase_options.dart`) and platform files.
+
+Template values are available in `lib/firebase_options.example.dart`.
 
 ## After connecting
 
