@@ -43,3 +43,18 @@ flutter run
 
 - If PowerShell execution policy blocks commands, use `npm.cmd` / `firebase.cmd` directly.
 - For Android release builds, set your real application id in `android/app/build.gradle.kts`.
+
+## Security hook
+
+This repository includes a pre-commit secret scanner in `.githooks/pre-commit`.
+
+Install it locally:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tool\install_git_hooks.ps1
+```
+
+The hook blocks commits that include:
+
+- Firebase credential files (`android/app/google-services.json`, `ios/Runner/GoogleService-Info.plist`, `lib/firebase_options.dart`)
+- Common secret patterns (Google API keys, private keys, AWS access keys, GitHub tokens, Slack tokens)
