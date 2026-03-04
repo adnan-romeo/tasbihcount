@@ -19,6 +19,8 @@ class _MainCounterScreenState extends State<MainCounterScreen>
   static const String _todayCountPrefix = 'today_count';
   static const String _weekCountPrefix = 'week_count';
   static const String _monthCountPrefix = 'month_count';
+  static const String _lifetimeCountPrefix = 'lifetime_count';
+  static const String _lastUpdatedPrefix = 'last_updated_timestamp';
   static const String _locationCityPrefix = 'location_city';
   static const String _locationCountryPrefix = 'location_country';
   static const String _offlineBucket = 'offline';
@@ -49,6 +51,7 @@ class _MainCounterScreenState extends State<MainCounterScreen>
   int todayCount = 0;
   int weekCount = 0;
   int monthCount = 0;
+  int lifetimeCount = 0;
   String selectedCity = 'Dhaka';
   String selectedCountry = 'Bangladesh';
   String sehriText = 'Last: 05:03 AM';
@@ -102,12 +105,40 @@ class _MainCounterScreenState extends State<MainCounterScreen>
     final String? uid = _authService.currentUser?.uid;
     final String localBucket = uid ?? _offlineBucket;
 
+    int? lastUpdatedMillis =
+        prefs.getInt(_scopedKey(_lastUpdatedPrefix, localBucket));
+
     int loadedToday =
         prefs.getInt(_scopedKey(_todayCountPrefix, localBucket)) ?? 0;
     int loadedWeek =
         prefs.getInt(_scopedKey(_weekCountPrefix, localBucket)) ?? 0;
     int loadedMonth =
         prefs.getInt(_scopedKey(_monthCountPrefix, localBucket)) ?? 0;
+    int loadedLifetime =
+        prefs.getInt(_scopedKey(_lifetimeCountPrefix, localBucket)) ?? 0;
+
+    // Apply local time-based resets (for offline support)
+    if (lastUpdatedMillis != null) {
+      final DateTime lastUpdated =
+          DateTime.fromMillisecondsSinceEpoch(lastUpdatedMillis);
+      final DateTime now = DateTime.now();
+
+      // 1. Daily Reset
+      if (!_isSameDay(now, lastUpdated)) {
+        loadedToday = 0;
+      }
+
+      // 2. Weekly Reset (Friday)
+      final DateTime lastFriday = _getLastFriday(now);
+      if (lastUpdated.isBefore(lastFriday)) {
+        loadedWeek = 0;
+      }
+
+      // 3. Monthly Reset
+      if (!_isSameMonth(now, lastUpdated)) {
+        loadedMonth = 0;
+      }
+    }
 
     if (uid != null) {
       try {
@@ -116,6 +147,7 @@ class _MainCounterScreenState extends State<MainCounterScreen>
         loadedToday = cloudCounts['today'] ?? 0;
         loadedWeek = cloudCounts['week'] ?? 0;
         loadedMonth = cloudCounts['month'] ?? 0;
+        loadedLifetime = cloudCounts['lifetime'] ?? 0;
       } catch (_) {}
     }
 
@@ -128,6 +160,7 @@ class _MainCounterScreenState extends State<MainCounterScreen>
       todayCount = loadedToday;
       weekCount = loadedWeek;
       monthCount = loadedMonth;
+      lifetimeCount = loadedLifetime;
       isLoading = false;
     });
 
@@ -145,13 +178,20 @@ class _MainCounterScreenState extends State<MainCounterScreen>
     try {
       do {
         _hasPendingSave = false;
-        final int todayToSave = todayCount;
-        final int weekToSave = weekCount;
-        final int monthToSave = monthCount;
 
         final SharedPreferences prefs = await SharedPreferences.getInstance();
         final String? uid = _authService.currentUser?.uid;
         final String localBucket = uid ?? _offlineBucket;
+
+        final int todayToSave = todayCount;
+        final int weekToSave = weekCount;
+        final int monthToSave = monthCount;
+        final int lifetimeToSave = lifetimeCount;
+
+        await prefs.setInt(
+          _scopedKey(_lastUpdatedPrefix, localBucket),
+          DateTime.now().millisecondsSinceEpoch,
+        );
 
         await prefs.setInt(
           _scopedKey(_todayCountPrefix, localBucket),
@@ -165,6 +205,10 @@ class _MainCounterScreenState extends State<MainCounterScreen>
           _scopedKey(_monthCountPrefix, localBucket),
           monthToSave,
         );
+        await prefs.setInt(
+          _scopedKey(_lifetimeCountPrefix, localBucket),
+          lifetimeToSave,
+        );
 
         if (uid != null) {
           await _counterService.saveUserCounts(
@@ -172,6 +216,7 @@ class _MainCounterScreenState extends State<MainCounterScreen>
             today: todayToSave,
             week: weekToSave,
             month: monthToSave,
+            lifetime: lifetimeToSave,
           );
         }
       } while (_hasPendingSave);
@@ -438,6 +483,7 @@ class _MainCounterScreenState extends State<MainCounterScreen>
       todayCount += 1;
       weekCount += 1;
       monthCount += 1;
+      lifetimeCount += 1;
     });
 
     _saveCounts();
@@ -673,5 +719,20 @@ class _MainCounterScreenState extends State<MainCounterScreen>
         ),
       ),
     );
+  }
+
+  DateTime _getLastFriday(DateTime date) {
+    // weekday: Mon=1, ... Fri=5, ... Sun=7
+    final int daysToSubtract = (date.weekday - DateTime.friday + 7) % 7;
+    final DateTime lastFri = date.subtract(Duration(days: daysToSubtract));
+    return DateTime(lastFri.year, lastFri.month, lastFri.day); // Strip time
+  }
+
+  bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  bool _isSameMonth(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month;
   }
 }
